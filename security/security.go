@@ -42,11 +42,11 @@ func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	time := time.Now().Add(time.Duration(sec.expirationTime) * time.Minute)
+	duration := time.Now().Add(time.Duration(sec.expirationTime) * time.Minute)
 	claims := &Claims{
 		Username: creds.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time),
+			ExpiresAt: jwt.NewNumericDate(duration),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

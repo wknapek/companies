@@ -17,7 +17,6 @@ type AppConfiguration struct {
 
 // ConfFile - default conf file name
 const ConfFile = "test_config.json"
-const minIntervalSeconds = 30
 
 // ReadConfiguration -
 func ReadConfiguration(path string) (AppConfiguration, error) {

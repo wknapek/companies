@@ -15,14 +15,14 @@ import (
 )
 
 func main() {
-	//pathToConf := flag.String("conf", config.ConfFile, "path to configuration")
+	pathToConf := flag.String("conf", config.ConfFile, "path to configuration")
 	var help = flag.Bool("help", false, "Show help")
 	flag.Parse()
 	if *help {
 		flag.Usage()
 		os.Exit(0) //nolint:gocritic
 	}
-	cfg, errConf := config.ReadConfiguration("resource/config.json")
+	cfg, errConf := config.ReadConfiguration(*pathToConf)
 	if errConf != nil {
 		panic(errConf)
 	}

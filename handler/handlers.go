@@ -37,7 +37,7 @@ type Company struct {
 }
 
 type Handler struct {
-	dbHandler *mongoCRUD
+	dbHandler *MongoCRUD
 }
 
 func NewHandler(url, user, pass string) *Handler {
@@ -182,7 +182,7 @@ func (han *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-type mongoCRUD struct {
+type MongoCRUD struct {
 	url        string
 	user       string
 	passwd     string
@@ -190,15 +190,15 @@ type mongoCRUD struct {
 	collection *mongo.Collection
 }
 
-func NewMongoCrud(url, user, passwd string) *mongoCRUD {
-	return &mongoCRUD{
+func NewMongoCrud(url, user, passwd string) *MongoCRUD {
+	return &MongoCRUD{
 		url:    url,
 		user:   user,
 		passwd: passwd,
 	}
 }
 
-func (moDB *mongoCRUD) Connect() {
+func (moDB *MongoCRUD) Connect() {
 	cred := options.Credential{
 		Username: moDB.user,
 		Password: moDB.passwd,
@@ -220,7 +220,7 @@ func (moDB *mongoCRUD) Connect() {
 	moDB.collection = col
 }
 
-func (moDB *mongoCRUD) Create(comp Company) (*Company, error) {
+func (moDB *MongoCRUD) Create(comp Company) (*Company, error) {
 	var doc Company
 	moDB.collection.FindOne(context.TODO(), bson.M{"name": comp.Name}).Decode(&doc)
 	if doc.ID != "" {
@@ -240,7 +240,7 @@ func (moDB *mongoCRUD) Create(comp Company) (*Company, error) {
 	return &comp, nil
 }
 
-func (moDB *mongoCRUD) Read(name string) (*Company, error) {
+func (moDB *MongoCRUD) Read(name string) (*Company, error) {
 	res := moDB.collection.FindOne(context.TODO(), bson.M{"name": name})
 	out := Company{}
 	err := res.Decode(&out)
@@ -251,7 +251,7 @@ func (moDB *mongoCRUD) Read(name string) (*Company, error) {
 	return &out, nil
 }
 
-func (moDB *mongoCRUD) Update(comp Company) (int64, error) {
+func (moDB *MongoCRUD) Update(comp Company) (int64, error) {
 	res, errUpd := moDB.collection.ReplaceOne(context.TODO(), bson.M{"name": comp.Name}, comp)
 	if errUpd != nil {
 		log.Error().Err(errUpd)
@@ -260,7 +260,7 @@ func (moDB *mongoCRUD) Update(comp Company) (int64, error) {
 	return res.ModifiedCount, nil
 }
 
-func (moDB *mongoCRUD) Delete(name string) (int64, error) {
+func (moDB *MongoCRUD) Delete(name string) (int64, error) {
 	res, err := moDB.collection.DeleteOne(context.TODO(), bson.M{"name": name})
 	if err != nil {
 		log.Error().Err(err)
