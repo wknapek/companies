@@ -2,17 +2,18 @@ package security
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 )
 
-const expirationTime = 15
+var jwtKey = []byte("my_secret_key")
 
 type Security struct {
-	users  map[string]string
-	jwtKey []byte
+	users          map[string]string
+	expirationTime int
 }
 
 type Credentials struct {
@@ -25,8 +26,8 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func New(users map[string]string) *Security {
-	return &Security{users: users}
+func New(users map[string]string, exTime int) *Security {
+	return &Security{users: users, expirationTime: exTime}
 }
 
 func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +42,7 @@ func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	time := time.Now().Add(expirationTime * time.Minute)
+	time := time.Now().Add(time.Duration(sec.expirationTime) * time.Minute)
 	claims := &Claims{
 		Username: creds.Username,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -49,15 +50,26 @@ func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, errToken := token.SignedString(sec.jwtKey)
+	tokenString, errToken := token.SignedString(jwtKey)
 
 	if errToken != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:    "token",
-		Value:   tokenString,
-		Expires: time,
+	fmt.Fprint(w, tokenString)
+}
+
+func (sec *Security) VerifyToken(tokenStr string) (string, bool) {
+	claims := &Claims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
 	})
+	if err != nil {
+		return err.Error(), false
+	}
+	return "", token.Valid
+}
+
+func GetJWTKey() []byte {
+	return jwtKey
 }

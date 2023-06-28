@@ -7,8 +7,11 @@ import (
 	"io"
 	"net/http"
 
+	"companies/security"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -16,6 +19,13 @@ import (
 )
 
 const colNames = "companies"
+
+const (
+	corpo = "Corporations"
+	nProf = "NonProfit"
+	coop  = "Cooperative"
+	solPr = "Sole Proprietorship"
+)
 
 type Company struct {
 	ID                string `json:"id,omitempty" bson:"_id,omitempty"`
@@ -34,8 +44,12 @@ func NewHandler(url, user, pass string) *Handler {
 	return &Handler{NewMongoCrud(url, user, pass)}
 }
 
+func (han *Handler) Init() {
+	han.dbHandler.Connect()
+}
+
 func (han *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	tokenStr := r.Header.Get("Token")
+	tokenStr := r.Header.Get("token")
 	if tokenStr == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -54,6 +68,11 @@ func (han *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	errUnm := json.Unmarshal(reqBody, &company)
 	if errUnm != nil {
 		http.Error(w, fmt.Sprintf("%v", errUnm), http.StatusBadRequest)
+		return
+	}
+	valTypeComp := validateType(company.Type)
+	if !valTypeComp {
+		http.Error(w, fmt.Sprintf("type of company %s not valid", company.Type), http.StatusBadRequest)
 		return
 	}
 	result, errCreate := han.dbHandler.Create(company)
@@ -81,7 +100,7 @@ func (han *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprint(msg), http.StatusUnauthorized)
 		return
 	}
-	name := r.URL.Query().Get("name")
+	name := chi.URLParam(r, "name")
 	result, errDel := han.dbHandler.Delete(name)
 	if errDel != nil {
 		http.Error(w, fmt.Sprintf("%v", errDel), http.StatusBadRequest)
@@ -116,6 +135,11 @@ func (han *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	errUnm := json.Unmarshal(reqBody, &company)
 	if errUnm != nil {
 		http.Error(w, fmt.Sprintf("%v", errUnm), http.StatusBadRequest)
+		return
+	}
+	valTypeComp := validateType(company.Type)
+	if !valTypeComp {
+		http.Error(w, fmt.Sprintf("type of company %s not valid", company.Type), http.StatusBadRequest)
 		return
 	}
 	result, errCreate := han.dbHandler.Update(company)
@@ -198,12 +222,14 @@ func (moDB *mongoCRUD) Connect() {
 
 func (moDB *mongoCRUD) Create(comp Company) (*Company, error) {
 	var doc Company
-	exist := moDB.collection.FindOne(context.TODO(), bson.M{"name": comp.Name}).Decode(&doc)
-	if exist != nil {
+	moDB.collection.FindOne(context.TODO(), bson.M{"name": comp.Name}).Decode(&doc)
+	if doc.ID != "" {
+		log.Error().Err(fmt.Errorf("company %s exist", comp.Name))
 		return nil, fmt.Errorf("company %s exist", comp.Name)
 	}
 	res, err := moDB.collection.InsertOne(context.TODO(), comp)
 	if err != nil {
+		log.Error().Err(err)
 		return nil, err
 	}
 
@@ -219,6 +245,7 @@ func (moDB *mongoCRUD) Read(name string) (*Company, error) {
 	out := Company{}
 	err := res.Decode(&out)
 	if err != nil {
+		log.Error().Err(err)
 		return nil, err
 	}
 	return &out, nil
@@ -227,6 +254,7 @@ func (moDB *mongoCRUD) Read(name string) (*Company, error) {
 func (moDB *mongoCRUD) Update(comp Company) (int64, error) {
 	res, errUpd := moDB.collection.ReplaceOne(context.TODO(), bson.M{"name": comp.Name}, comp)
 	if errUpd != nil {
+		log.Error().Err(errUpd)
 		return 0, errUpd
 	}
 	return res.ModifiedCount, nil
@@ -235,21 +263,35 @@ func (moDB *mongoCRUD) Update(comp Company) (int64, error) {
 func (moDB *mongoCRUD) Delete(name string) (int64, error) {
 	res, err := moDB.collection.DeleteOne(context.TODO(), bson.M{"name": name})
 	if err != nil {
+		log.Error().Err(err)
 		return 0, err
 	}
 	return res.DeletedCount, nil
 }
 
 func verifyToken(tokenStr string) (string, bool) {
-	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		_, ok := token.Method.(*jwt.SigningMethodECDSA)
-		if !ok {
-			return nil, fmt.Errorf("you're Unauthorized")
-		}
-		return "", nil
+	claims := &security.Claims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+		return security.GetJWTKey(), nil
 	})
 	if err != nil {
+		log.Error().Err(err)
 		return err.Error(), false
 	}
 	return "", token.Valid
+}
+
+func validateType(typeCom string) bool {
+	switch typeCom {
+	case coop:
+		return true
+	case nProf:
+		return true
+	case corpo:
+		return true
+	case solPr:
+		return true
+	default:
+		return false
+	}
 }

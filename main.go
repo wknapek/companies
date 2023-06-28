@@ -1,8 +1,11 @@
 package main
 
 import (
+	"flag"
 	"net/http"
+	"os"
 
+	"companies/config"
 	"companies/handler"
 	"companies/security"
 
@@ -12,18 +15,30 @@ import (
 )
 
 func main() {
+	//pathToConf := flag.String("conf", config.ConfFile, "path to configuration")
+	var help = flag.Bool("help", false, "Show help")
+	flag.Parse()
+	if *help {
+		flag.Usage()
+		os.Exit(0) //nolint:gocritic
+	}
+	cfg, errConf := config.ReadConfiguration("resource/config.json")
+	if errConf != nil {
+		panic(errConf)
+	}
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	sec := security.Security{}
+	sec := security.New(map[string]string{"admin": "admin"}, cfg.SessionTime)
 	router := chi.NewRouter()
-	handl := handler.NewHandler("", "", "")
+	handl := handler.NewHandler(cfg.DBURI, cfg.DBUser, cfg.DBPasswd)
+	handl.Init()
 	router.Use(middleware.Logger)
 	router.Post("/companies/login", sec.Login)
 	router.Delete("/companies/{name}", handl.Delete)
 	router.Patch("/companies", handl.Update)
 	router.Post("/companies", handl.Create)
 	router.Get("/companies/{name}", handl.Get)
-	err := http.ListenAndServe(":3001", router)
-	if err != nil {
+	errLAndS := http.ListenAndServe(":3001", router)
+	if errLAndS != nil {
 		return
 	}
 }

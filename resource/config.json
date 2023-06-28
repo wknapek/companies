@@ -1,0 +1,9 @@
+{
+  "user": "test",
+  "password": "pwd",
+  "dburi": "mongodb://localhost:27017",
+  "sessionTime": 15,
+  "port": ":3001",
+  "db_user": "companies",
+  "db_passwd": "S3cret"
+}
