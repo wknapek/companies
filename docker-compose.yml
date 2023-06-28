@@ -1,0 +1,14 @@
+version: '3.9'
+
+services:
+  mongodb:
+    image: mongo:5.0
+    restart: always
+    ports:
+      - 27017:27017
+      - 28017:28017
+    volumes:
+      - ~/apps/mongo:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=companies
+      - MONGO_INITDB_ROOT_PASSWORD=S3cret
