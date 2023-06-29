@@ -18,3 +18,5 @@ To run application as a parameter provide configuration in JSON format.
 * password -> to authenticate via JWT
 * JWT_Key -> to signs tokens
 * port -> to set port for application
+##
+T0 execute automated tests run ```docker-compose up```
