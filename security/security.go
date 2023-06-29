@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/rs/zerolog/log"
 )
-
-var jwtKey = []byte("my_secret_key")
 
 type Security struct {
 	users          map[string]string
 	expirationTime int
+	jwtKey         []byte
 }
 
 type Credentials struct {
@@ -26,8 +26,8 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func New(users map[string]string, exTime int) *Security {
-	return &Security{users: users, expirationTime: exTime}
+func New(users map[string]string, exTime int, jwtKey []byte) *Security {
+	return &Security{users: users, expirationTime: exTime, jwtKey: jwtKey}
 }
 
 func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +50,7 @@ func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, errToken := token.SignedString(jwtKey)
+	tokenString, errToken := token.SignedString(sec.jwtKey)
 
 	if errToken != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -62,14 +62,11 @@ func (sec *Security) Login(w http.ResponseWriter, r *http.Request) {
 func (sec *Security) VerifyToken(tokenStr string) (string, bool) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return sec.jwtKey, nil
 	})
 	if err != nil {
+		log.Error().Msg(err.Error())
 		return err.Error(), false
 	}
 	return "", token.Valid
-}
-
-func GetJWTKey() []byte {
-	return jwtKey
 }

@@ -13,10 +13,11 @@ type AppConfiguration struct {
 	Port        string `json:"port"`
 	DBUser      string `json:"db_user"`
 	DBPasswd    string `json:"db_passwd"`
+	JWT_Key     string `json:"JWT_Key"`
 }
 
 // ConfFile - default conf file name
-const ConfFile = "test_config.json"
+const ConfFile = "resource/config.json"
 
 // ReadConfiguration -
 func ReadConfiguration(path string) (AppConfiguration, error) {

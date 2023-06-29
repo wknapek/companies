@@ -3,7 +3,8 @@
   "password": "pwd",
   "dburi": "mongodb://localhost:27017",
   "sessionTime": 15,
-  "port": ":3001",
+  "port": "3001",
   "db_user": "companies",
-  "db_passwd": "S3cret"
+  "db_passwd": "S3cret",
+  "JWT_Key": "my_secret_key"
 }

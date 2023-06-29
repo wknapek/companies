@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"companies/security"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/golang-jwt/jwt/v4"
 	"github.com/rs/zerolog/log"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -37,11 +37,12 @@ type Company struct {
 }
 
 type Handler struct {
-	dbHandler *MongoCRUD
+	dbHandler    *MongoCRUD
+	secValidator *security.Security
 }
 
-func NewHandler(url, user, pass string) *Handler {
-	return &Handler{NewMongoCrud(url, user, pass)}
+func NewHandler(url, user, pass string, sec *security.Security) *Handler {
+	return &Handler{dbHandler: NewMongoCrud(url, user, pass), secValidator: sec}
 }
 
 func (han *Handler) Init() {
@@ -54,7 +55,7 @@ func (han *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	msg, ok := verifyToken(tokenStr)
+	msg, ok := han.secValidator.VerifyToken(tokenStr)
 	if !ok {
 		http.Error(w, fmt.Sprint(msg), http.StatusUnauthorized)
 		return
@@ -95,7 +96,7 @@ func (han *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	msg, ok := verifyToken(tokenStr)
+	msg, ok := han.secValidator.VerifyToken(tokenStr)
 	if !ok {
 		http.Error(w, fmt.Sprint(msg), http.StatusUnauthorized)
 		return
@@ -121,7 +122,7 @@ func (han *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	msg, ok := verifyToken(tokenStr)
+	msg, ok := han.secValidator.VerifyToken(tokenStr)
 	if !ok {
 		http.Error(w, fmt.Sprint(msg), http.StatusUnauthorized)
 		return
@@ -153,7 +154,12 @@ func (han *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("error building the response, %v", errEncode), http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
+	_, errMsg := fmt.Fprintf(w, "number of updated companies:%d", result)
+	if errMsg != nil {
+		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (han *Handler) Get(w http.ResponseWriter, r *http.Request) {
@@ -162,7 +168,7 @@ func (han *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	msg, ok := verifyToken(tokenStr)
+	msg, ok := han.secValidator.VerifyToken(tokenStr)
 	if !ok {
 		http.Error(w, fmt.Sprint(msg), http.StatusUnauthorized)
 		return
@@ -218,24 +224,29 @@ func (moDB *MongoCRUD) Connect() {
 		col = moDB.compDB.Collection(colNames)
 	}
 	moDB.collection = col
+	log.Info().Msg("connected to mongoDB")
 }
 
 func (moDB *MongoCRUD) Create(comp Company) (*Company, error) {
 	var doc Company
 	moDB.collection.FindOne(context.TODO(), bson.M{"name": comp.Name}).Decode(&doc)
 	if doc.ID != "" {
-		log.Error().Err(fmt.Errorf("company %s exist", comp.Name))
+		log.Error().Msgf(fmt.Sprintf("company %s exist", comp.Name))
 		return nil, fmt.Errorf("company %s exist", comp.Name)
 	}
 	res, err := moDB.collection.InsertOne(context.TODO(), comp)
 	if err != nil {
-		log.Error().Err(err)
+		log.Error().Msg(err.Error())
 		return nil, err
 	}
 
 	oid, ok := res.InsertedID.(primitive.ObjectID)
+	oidStr := oid.String()
+
+	oidStr = strings.ReplaceAll(oidStr, "ObjectID(\"", "")
+	oidStr = strings.ReplaceAll(oidStr, "\")", "")
 	if ok {
-		comp.ID = oid.String()
+		comp.ID = oidStr
 	}
 	return &comp, nil
 }
@@ -245,16 +256,17 @@ func (moDB *MongoCRUD) Read(name string) (*Company, error) {
 	out := Company{}
 	err := res.Decode(&out)
 	if err != nil {
-		log.Error().Err(err)
+		log.Error().Msg(err.Error())
 		return nil, err
 	}
 	return &out, nil
 }
 
 func (moDB *MongoCRUD) Update(comp Company) (int64, error) {
+	comp.ID = ""
 	res, errUpd := moDB.collection.ReplaceOne(context.TODO(), bson.M{"name": comp.Name}, comp)
 	if errUpd != nil {
-		log.Error().Err(errUpd)
+		log.Error().Msg(errUpd.Error())
 		return 0, errUpd
 	}
 	return res.ModifiedCount, nil
@@ -263,22 +275,10 @@ func (moDB *MongoCRUD) Update(comp Company) (int64, error) {
 func (moDB *MongoCRUD) Delete(name string) (int64, error) {
 	res, err := moDB.collection.DeleteOne(context.TODO(), bson.M{"name": name})
 	if err != nil {
-		log.Error().Err(err)
+		log.Error().Msg(err.Error())
 		return 0, err
 	}
 	return res.DeletedCount, nil
-}
-
-func verifyToken(tokenStr string) (string, bool) {
-	claims := &security.Claims{}
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-		return security.GetJWTKey(), nil
-	})
-	if err != nil {
-		log.Error().Err(err)
-		return err.Error(), false
-	}
-	return "", token.Valid
 }
 
 func validateType(typeCom string) bool {
